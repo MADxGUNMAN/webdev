@@ -2,9 +2,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import CourseCard from '@/components/CourseCard';
+import JsonLd from '@/components/JsonLd';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
+
+const SITE_URL = 'https://www.webdevcodes.xyz';
 
 export default function HomePage() {
   const { userData } = useAuth();
@@ -12,6 +15,10 @@ export default function HomePage() {
   const [categories, setCategories] = useState([]);
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    document.title = 'WebDev Codes – Learn Web Development Online';
+  }, []);
 
   useEffect(() => {
     const unsub1 = onSnapshot(query(collection(db, 'playlists'), where('status', '==', 'active'), limit(6)), snap => {
@@ -27,8 +34,27 @@ export default function HomePage() {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
 
+  const courseListSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Featured Web Development Courses',
+    itemListElement: courses.map((c, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      item: {
+        '@type': 'Course',
+        name: c.title,
+        url: `${SITE_URL}/playlist?id=${c.id}`,
+        provider: { '@type': 'Organization', name: 'WebDev Codes', url: SITE_URL },
+        ...(c.teacherName && { instructor: { '@type': 'Person', name: c.teacherName } }),
+      },
+    })),
+  };
+
   return (
     <>
+      {courses.length > 0 && <JsonLd data={courseListSchema} />}
+
       <section className="home-grid">
         <h1 className="heading">quick options</h1>
         <div className="box-container">

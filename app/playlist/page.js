@@ -6,6 +6,9 @@ import { collection, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, Suspense } from 'react';
+import JsonLd from '@/components/JsonLd';
+
+const SITE_URL = 'https://www.webdevcodes.xyz';
 
 function PlaylistContent() {
     const { user, userData } = useAuth();
@@ -39,6 +42,13 @@ function PlaylistContent() {
         return () => unsub();
     }, [playlistId]);
 
+    // Dynamic title
+    useEffect(() => {
+        if (playlist?.title) {
+            document.title = `${playlist.title} – WebDev Codes`;
+        }
+    }, [playlist]);
+
     const toggleSavePlaylist = async () => {
         if (!user) return router.push('/login');
         if (!playlistId) return;
@@ -52,8 +62,29 @@ function PlaylistContent() {
     if (loading) return <p style={{ padding: '2rem', fontSize: '1.8rem' }}>Loading playlist...</p>;
     if (!playlist) return <p style={{ padding: '2rem', fontSize: '1.8rem' }}>Playlist not found.</p>;
 
+    const courseSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'Course',
+        name: playlist.title,
+        description: playlist.description || `Learn ${playlist.title} with WebDev Codes`,
+        url: `${SITE_URL}/playlist?id=${playlist.id}`,
+        provider: { '@type': 'Organization', name: 'WebDev Codes', url: SITE_URL },
+        ...(playlist.teacherName && { instructor: { '@type': 'Person', name: playlist.teacherName } }),
+        ...(playlist.thumbnail && { image: playlist.thumbnail }),
+        ...(videos.length > 0 && {
+            hasPart: videos.map((v, i) => ({
+                '@type': 'VideoObject',
+                name: v.title,
+                url: `${SITE_URL}/watch-video?v=${v.id}`,
+                position: i + 1,
+                ...(v.thumbnailUrl && { thumbnailUrl: v.thumbnailUrl }),
+            })),
+        }),
+    };
+
     return (
         <>
+            <JsonLd data={courseSchema} />
             <section className="playlist-details">
                 <h1 className="heading">playlist details</h1>
                 <div className="row">

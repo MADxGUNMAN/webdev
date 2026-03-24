@@ -1,9 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
 import ReviewCard from '@/components/ReviewCard';
+import JsonLd from '@/components/JsonLd';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, deleteDoc, doc, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
+
+const SITE_URL = 'https://www.webdevcodes.xyz';
 
 export default function AboutPage() {
     const { user, userData } = useAuth();
@@ -63,8 +66,44 @@ export default function AboutPage() {
     const description = aboutData?.description || '';
     const stats = aboutData?.stats || [];
 
+    useEffect(() => {
+        document.title = 'About Us – WebDev Codes';
+    }, []);
+
+    const avgRating = reviews.length > 0 ? (reviews.reduce((sum, r) => sum + (r.stars || 0), 0) / reviews.length).toFixed(1) : 0;
+
+    const aboutSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'AboutPage',
+        name: heading,
+        description: description,
+        url: `${SITE_URL}/about`,
+        mainEntity: {
+            '@type': 'EducationalOrganization',
+            name: 'WebDev Codes',
+            url: SITE_URL,
+            ...(reviews.length > 0 && {
+                aggregateRating: {
+                    '@type': 'AggregateRating',
+                    ratingValue: avgRating,
+                    reviewCount: reviews.length,
+                    bestRating: 5,
+                    worstRating: 1,
+                },
+                review: reviews.slice(0, 10).map(r => ({
+                    '@type': 'Review',
+                    author: { '@type': 'Person', name: r.name },
+                    reviewRating: { '@type': 'Rating', ratingValue: r.stars || 5, bestRating: 5 },
+                    reviewBody: r.text,
+                    ...(r.createdAt && { datePublished: r.createdAt }),
+                })),
+            }),
+        },
+    };
+
     return (
         <>
+            <JsonLd data={aboutSchema} />
             <section className="about">
                 <div className="row">
                     <div className="image">

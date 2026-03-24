@@ -4,11 +4,18 @@ import Link from 'next/link';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import TeacherCard from '@/components/TeacherCard';
+import JsonLd from '@/components/JsonLd';
+
+const SITE_URL = 'https://www.webdevcodes.xyz';
 
 export default function TeachersPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [teachers, setTeachers] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        document.title = 'Our Teachers – WebDev Codes';
+    }, []);
 
     useEffect(() => {
         // Real-time listener for approved teachers
@@ -48,47 +55,70 @@ export default function TeachersPage() {
         t.role.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    const teachersSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        name: 'Expert Web Development Teachers',
+        url: `${SITE_URL}/teachers`,
+        numberOfItems: teachers.length,
+        itemListElement: teachers.map((t, i) => ({
+            '@type': 'ListItem',
+            position: i + 1,
+            item: {
+                '@type': 'Person',
+                name: t.name,
+                url: `${SITE_URL}/teacher-profile?id=${t.id}`,
+                image: t.img,
+                jobTitle: t.role,
+                worksFor: { '@type': 'Organization', name: 'WebDev Codes', url: SITE_URL },
+            },
+        })),
+    };
+
     return (
-        <section className="teachers">
-            <h1 className="heading">expert teachers</h1>
+        <>
+            {teachers.length > 0 && <JsonLd data={teachersSchema} />}
+            <section className="teachers">
+                <h1 className="heading">expert teachers</h1>
 
-            <form className="search-tutor" onSubmit={e => e.preventDefault()}>
-                <input
-                    type="text"
-                    placeholder="search tutors..."
-                    maxLength={100}
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                />
-                <button type="submit" className="fas fa-search"></button>
-            </form>
+                <form className="search-tutor" onSubmit={e => e.preventDefault()}>
+                    <input
+                        type="text"
+                        placeholder="search tutors..."
+                        maxLength={100}
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                    />
+                    <button type="submit" className="fas fa-search"></button>
+                </form>
 
-            <div className="box-container">
-                <div className="box offer">
-                    <h3>become a tutor</h3>
-                    <p>Share your knowledge and inspire learners worldwide! Become a tutor on our platform and connect with students eager to learn from your expertise.</p>
-                    <Link href="/register" className="inline-btn">get started</Link>
+                <div className="box-container">
+                    <div className="box offer">
+                        <h3>become a tutor</h3>
+                        <p>Share your knowledge and inspire learners worldwide! Become a tutor on our platform and connect with students eager to learn from your expertise.</p>
+                        <Link href="/register" className="inline-btn">get started</Link>
+                    </div>
+
+                    {loading ? (
+                        <p style={{ padding: '2rem', fontSize: '1.6rem', color: 'var(--light-color)' }}>Loading teachers...</p>
+                    ) : filtered.length > 0 ? (
+                        filtered.map(t => (
+                            <TeacherCard
+                                key={t.id}
+                                img={t.img}
+                                name={t.name}
+                                role={t.role}
+                                playlists={t.playlists}
+                                videos={t.videos}
+                                likes={t.likes}
+                                href={`/teacher-profile?id=${t.id}`}
+                            />
+                        ))
+                    ) : (
+                        <p style={{ padding: '2rem', fontSize: '1.6rem', color: 'var(--light-color)' }}>No teachers found.</p>
+                    )}
                 </div>
-
-                {loading ? (
-                    <p style={{ padding: '2rem', fontSize: '1.6rem', color: 'var(--light-color)' }}>Loading teachers...</p>
-                ) : filtered.length > 0 ? (
-                    filtered.map(t => (
-                        <TeacherCard
-                            key={t.id}
-                            img={t.img}
-                            name={t.name}
-                            role={t.role}
-                            playlists={t.playlists}
-                            videos={t.videos}
-                            likes={t.likes}
-                            href={`/teacher-profile?id=${t.id}`}
-                        />
-                    ))
-                ) : (
-                    <p style={{ padding: '2rem', fontSize: '1.6rem', color: 'var(--light-color)' }}>No teachers found.</p>
-                )}
-            </div>
-        </section>
+            </section>
+        </>
     );
 }

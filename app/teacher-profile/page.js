@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { db } from '@/lib/firebase';
 import { doc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import CourseCard from '@/components/CourseCard';
+import JsonLd from '@/components/JsonLd';
+
+const SITE_URL = 'https://www.webdevcodes.xyz';
 
 function TeacherProfileContent() {
     const params = useSearchParams();
@@ -33,6 +36,13 @@ function TeacherProfileContent() {
         return () => unsub();
     }, [teacherId]);
 
+    // Dynamic title
+    useEffect(() => {
+        if (teacher?.name) {
+            document.title = `${teacher.name} – WebDev Codes`;
+        }
+    }, [teacher]);
+
     // Real-time playlists
     useEffect(() => {
         if (!teacherId) return;
@@ -57,8 +67,23 @@ function TeacherProfileContent() {
     if (loading) return <p style={{ padding: '2rem', fontSize: '1.8rem' }}>Loading profile...</p>;
     if (!teacher) return <p style={{ padding: '2rem', fontSize: '1.8rem' }}>Teacher not found.</p>;
 
+    const profileSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'ProfilePage',
+        url: `${SITE_URL}/teacher-profile?id=${teacher.id}`,
+        mainEntity: {
+            '@type': 'Person',
+            name: teacher.name,
+            image: teacher.photoURL,
+            jobTitle: teacher.role,
+            ...(teacher.bio && { description: teacher.bio }),
+            worksFor: { '@type': 'Organization', name: 'WebDev Codes', url: SITE_URL },
+        },
+    };
+
     return (
         <>
+            <JsonLd data={profileSchema} />
             <section className="teacher-profile">
                 <h1 className="heading">profile details</h1>
                 <div className="details">

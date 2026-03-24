@@ -5,6 +5,9 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { doc, updateDoc, arrayUnion, arrayRemove, increment, addDoc, collection, query, where, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import JsonLd from '@/components/JsonLd';
+
+const SITE_URL = 'https://www.webdevcodes.xyz';
 
 function WatchVideoContent() {
     const params = useSearchParams();
@@ -32,6 +35,13 @@ function WatchVideoContent() {
         return () => unsub();
     }, [videoParam]);
 
+    // Dynamic title
+    useEffect(() => {
+        if (video?.title) {
+            document.title = `${video.title} – WebDev Codes`;
+        }
+    }, [video]);
+
     // Increment views once per page visit (outside the listener)
     useEffect(() => {
         if (!videoParam || viewIncremented.current) return;
@@ -53,6 +63,7 @@ function WatchVideoContent() {
                     date: c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '',
                     text: c.text,
                     userId: c.userId,
+                    createdAt: c.createdAt,
                 };
             }));
         });
@@ -100,8 +111,34 @@ function WatchVideoContent() {
     if (loading) return <p style={{ padding: '2rem', fontSize: '1.8rem' }}>Loading video...</p>;
     if (!video) return <p style={{ padding: '2rem', fontSize: '1.8rem' }}>Video not found.</p>;
 
+    const videoSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'VideoObject',
+        name: video.title,
+        description: video.description || `Watch ${video.title} on WebDev Codes`,
+        url: `${SITE_URL}/watch-video?v=${video.id}`,
+        ...(video.thumbnailUrl && { thumbnailUrl: video.thumbnailUrl }),
+        ...(video.videoUrl && { contentUrl: video.videoUrl }),
+        ...(video.createdAt && { uploadDate: video.createdAt }),
+        ...(video.teacherName && { author: { '@type': 'Person', name: video.teacherName } }),
+        publisher: { '@type': 'Organization', name: 'WebDev Codes', url: SITE_URL },
+        interactionStatistic: [
+            { '@type': 'InteractionCounter', interactionType: { '@type': 'WatchAction' }, userInteractionCount: video.views || 0 },
+            { '@type': 'InteractionCounter', interactionType: { '@type': 'LikeAction' }, userInteractionCount: video.likes || 0 },
+        ],
+        ...(comments.length > 0 && {
+            comment: comments.slice(0, 10).map(c => ({
+                '@type': 'Comment',
+                text: c.text,
+                author: { '@type': 'Person', name: c.name },
+                ...(c.createdAt && { dateCreated: c.createdAt }),
+            })),
+        }),
+    };
+
     return (
         <>
+            <JsonLd data={videoSchema} />
             <section className="watch-video">
                 <div className="video-container">
                     <div className="video">
