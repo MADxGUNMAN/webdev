@@ -1,0 +1,211 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ═══════════════════════════════════════════════════════════════
+    // 🔧 HELPER FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════
+
+    // Check if the request is from an authenticated user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user is the document owner
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Get the current user's profile data from Firestore
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Check if the authenticated user is an admin
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role == 'admin';
+    }
+
+    // Check if the authenticated user is an approved teacher
+    function isApprovedTeacher() {
+      let data = getUserData();
+      return isAuthenticated() && data.role == 'teacher' && data.teacherStatus == 'approved';
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // 👤 USERS COLLECTION
+    // Roles: student, teacher (pending/approved/blocked), admin
+    // Doc ID = Firebase Auth UID
+    // ═══════════════════════════════════════════════════════════════
+    match /users/{userId} {
+      // Any authenticated user can read user profiles
+      // (needed for teacher profiles, admin panels, AuthContext)
+      allow read: if isAuthenticated();
+
+      // Users can create their own profile document on registration
+      // (register page & AuthContext both use setDoc with user.uid)
+      allow create: if isOwner(userId);
+
+      // Users can update their own profile (savedPlaylists, likedVideos, comments, photoURL, etc.)
+      // Admins can update any user (teacherStatus, role changes)
+      allow update: if isOwner(userId) || isAdmin();
+
+      // Only admins can delete user documents
+      allow delete: if isAdmin();
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // 📚 PLAYLISTS COLLECTION
+    // Created by approved teachers, managed by teachers + admin
+    // Fields: title, description, category, thumbnail, teacherId,
+    //         teacherName, teacherPhoto, videoCount, totalLikes,
+    //         status (active/inactive), createdAt, updatedAt
+    // ═══════════════════════════════════════════════════════════════
+    match /playlists/{playlistId} {
+      // Anyone can read playlists (public courses page, homepage)
+      allow read: if true;
+
+      // Only approved teachers can create playlists
+      // Enforce teacherId matches the authenticated user
+      allow create: if isApprovedTeacher()
+                    && request.resource.data.teacherId == request.auth.uid;
+
+      // Teacher can update their own playlists (edit title, thumbnail, videoCount)
+      // Admin can update any playlist (change status to active/inactive)
+      allow update: if (isAuthenticated() && resource.data.teacherId == request.auth.uid)
+                    || isAdmin();
+
+      // Teacher can delete their own playlists
+      // Admin can delete any playlist
+      allow delete: if (isAuthenticated() && resource.data.teacherId == request.auth.uid)
+                    || isAdmin();
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // 🎥 VIDEOS COLLECTION
+    // Created by approved teachers, viewable by everyone
+    // Fields: title, description, videoUrl, thumbnailUrl, playlistId,
+    //         teacherId, likes, views, status, createdAt
+    // ═══════════════════════════════════════════════════════════════
+    match /videos/{videoId} {
+      // Anyone can read videos (public watch page, homepage)
+      allow read: if true;
+
+      // Only approved teachers can create videos
+      // Enforce teacherId matches the authenticated user
+      allow create: if isApprovedTeacher()
+                    && request.resource.data.teacherId == request.auth.uid;
+
+      // Any authenticated user can update videos because:
+      //   - Students increment views & likes (watch-video page)
+      //   - Teachers update their own video details
+      //   - Admin updates video status (active/inactive)
+      allow update: if isAuthenticated();
+
+      // Teacher can delete their own videos
+      // Admin can delete any video
+      allow delete: if (isAuthenticated() && resource.data.teacherId == request.auth.uid)
+                    || isAdmin();
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // 💬 COMMENTS COLLECTION
+    // Created by any authenticated user on videos
+    // Fields: text, userId, userName, userPhoto, videoId,
+    //         playlistId, createdAt
+    // ═══════════════════════════════════════════════════════════════
+    match /comments/{commentId} {
+      // Anyone can read comments (public watch page)
+      allow read: if true;
+
+      // Any authenticated user can post a comment
+      // Enforce userId matches the authenticated user (no impersonation)
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid;
+
+      // Comments are not editable (no update in the app)
+      allow update: if false;
+
+      // Users can delete their own comments only
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // ⭐ REVIEWS COLLECTION
+    // Student reviews on the about page + admin-managed reviews
+    // Fields: name, text, stars, img, userId, order, createdAt
+    // ═══════════════════════════════════════════════════════════════
+    match /reviews/{reviewId} {
+      // Anyone can read reviews (public about page)
+      allow read: if true;
+
+      // Any authenticated user can submit a review
+      // Admin can also create reviews from the admin panel
+      allow create: if isAuthenticated();
+
+      // Only admin can edit reviews (admin reviews panel)
+      allow update: if isAdmin();
+
+      // Users can delete their own review
+      // Admin can delete any review
+      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid)
+                    || isAdmin();
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // 📂 CATEGORIES COLLECTION
+    // Admin-managed course categories
+    // Fields: name, icon, order
+    // ═══════════════════════════════════════════════════════════════
+    match /categories/{categoryId} {
+      // Anyone can read categories (public homepage, courses page)
+      allow read: if true;
+
+      // Only admin can create, update, or delete categories
+      allow create, update, delete: if isAdmin();
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // 🏷️ TOPICS COLLECTION
+    // Admin-managed course topics
+    // Fields: name, icon, order
+    // ═══════════════════════════════════════════════════════════════
+    match /topics/{topicId} {
+      // Anyone can read topics (public homepage)
+      allow read: if true;
+
+      // Only admin can create, update, or delete topics
+      allow create, update, delete: if isAdmin();
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // ⚙️ SITE CONFIG COLLECTION
+    // Admin-managed site settings
+    // Docs: contactInfo, footer, developers, aboutPage
+    // ═══════════════════════════════════════════════════════════════
+    match /siteConfig/{configId} {
+      // Anyone can read site config (contact page, footer, about page)
+      allow read: if true;
+
+      // Only admin can create, update, or delete config
+      allow create, update, delete: if isAdmin();
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // 🔒 CATCH-ALL: Deny everything else
+    // ═══════════════════════════════════════════════════════════════
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

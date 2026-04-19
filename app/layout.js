@@ -70,6 +70,7 @@ export default function RootLayout({ children }) {
         <meta name="description" content={SITE_DESC} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="canonical" href={SITE_URL} />
+        <meta name="google-site-verification" content="googled5c4c1dd6c92ddf6" />
 
         {/* Open Graph */}
         <meta property="og:type" content="website" />
